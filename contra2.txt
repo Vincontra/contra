@@ -1,0 +1,4 @@
+nmcli connection delete "Jodd-CS"
+
+nmcli connection show
+
