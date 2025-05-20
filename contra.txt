@@ -1,0 +1,2365 @@
+1]
+CREATE DATABase V;
+USE V;
+-- Customer Table
+CREATE TABLE Customer (
+    CustomerId INT PRIMARY KEY,
+    Name VARCHAR(100),
+    PhoneNumber VARCHAR(15)
+);
+
+INSERT INTO Customer VALUES
+(1, 'John Doe', '1234567890'),
+(2, 'Jane Smith', '0987654321');
+
+-- Branch Table
+CREATE TABLE Branch (
+    BranchId INT PRIMARY KEY,
+    BranchName VARCHAR(100)
+);
+
+INSERT INTO Branch VALUES
+(1, 'Main Branch'),
+(2, 'City Center');
+
+-- Account Table
+CREATE TABLE Account (
+    AcctNo INT PRIMARY KEY AUTO_INCREMENT,
+    CustomerId INT,
+    BranchId INT,
+    Balance DECIMAL(15, 2)
+);
+
+INSERT INTO Account VALUES
+(101, 1, 1, 5000.00),
+(102, 2, 2, 15000.00);
+
+-- Loan Table
+CREATE TABLE Loan (
+    LoanId INT PRIMARY KEY,
+    CustomerId INT,
+    BranchId INT,
+    Amount DECIMAL(15, 2)
+);
+
+INSERT INTO Loan VALUES
+(201, 1, 1, 20000.00),
+(202, 2, 2, 30000.00);
+
+-- Transaction Table
+CREATE TABLE Transaction (
+    TransactionId INT PRIMARY KEY,
+    AcctNo INT,
+    Amount DECIMAL(15, 2)
+);
+
+INSERT INTO Transaction VALUES
+(301, 101, 1000.00),
+(302, 102, 500.00);
+
+-- Create Index on Customer Name
+CREATE INDEX idx_CustomerName ON Customer(Name);
+EXPLAIN SELECT * FROM Customer WHERE Name = 'John Doe'; -- It shows the query plan, including if indexes are used.
+
+
+CREATE VIEW CustomerAccounts AS
+SELECT c.CustomerId, c.Name, a.AcctNo, a.Balance
+FROM Customer c
+JOIN Account a ON c.CustomerId = a.CustomerId;
+
+CREATE VIEW BranchLoans AS
+SELECT b.BranchId, b.BranchName, l.LoanId, l.Amount
+FROM Branch b
+JOIN Loan l ON b.BranchId = l.BranchId;
+
+-- Removed Sequence for MySQL Compatibility, replaced with AUTO_INCREMENT
+
+SELECT * FROM Customer;
+SELECT * FROM Branch;
+SELECT * FROM Account;
+SELECT * FROM Loan;
+SELECT * FROM Transaction;
+SELECT * FROM CustomerAccounts;
+SELECT * FROM BranchLoans;
+
+
+2]
+CREATE DATABASE V2;
+use V2;
+
+-- Employee Table
+CREATE TABLE Employee (
+    EmployeeId INT PRIMARY KEY AUTO_INCREMENT,
+    Name VARCHAR(100),
+    DepartmentId INT
+);
+
+INSERT INTO Employee (Name, DepartmentId) VALUES
+('Alice', 1),
+('Bob', 2);
+
+-- Department Table
+CREATE TABLE Department (
+    DepartmentId INT PRIMARY KEY,
+    DepartmentName VARCHAR(100)
+);
+
+INSERT INTO Department VALUES
+(1, 'HR'),
+(2, 'IT');
+
+-- Project Table
+CREATE TABLE Project (
+    ProjectId INT PRIMARY KEY,
+    ProjectName VARCHAR(100)
+);
+
+INSERT INTO Project VALUES
+(101, 'ProjectX'),
+(102, 'ProjectY');
+
+-- WorksOn Table
+CREATE TABLE WorksOn (
+    EmployeeId INT,
+    ProjectId INT,
+    PRIMARY KEY (EmployeeId, ProjectId),
+    FOREIGN KEY (EmployeeId) REFERENCES Employee(EmployeeId),
+    FOREIGN KEY (ProjectId) REFERENCES Project(ProjectId)
+);
+
+INSERT INTO WorksOn VALUES
+(1, 101),
+(2, 102);
+
+-- Views
+CREATE VIEW EmployeeDepartments AS
+SELECT e.EmployeeId, e.Name, d.DepartmentName
+FROM Employee e
+JOIN Department d ON e.DepartmentId = d.DepartmentId;
+
+CREATE VIEW EmployeeProjects AS
+SELECT e.Name, p.ProjectName
+FROM Employee e
+JOIN WorksOn w ON e.EmployeeId = w.EmployeeId
+JOIN Project p ON w.ProjectId = p.ProjectId;
+
+-- Indexes
+CREATE INDEX idx_DepartmentEmployee ON Department (DepartmentId);
+CREATE INDEX idx_EmployeeDepartment ON Employee (DepartmentId, EmployeeId);
+
+SELECT * FROM WorksOn;
+
+
+3]
+
+-- 1. Create and use database
+DROP DATABASE IF EXISTS v3;
+CREATE DATABASE v3;
+USE v3;
+
+-- 2. Drop tables and triggers if exist
+DROP TABLE IF EXISTS Library_Audit;
+DROP TABLE IF EXISTS Library;
+
+DROP TRIGGER IF EXISTS triggerAfterInsertOrUpdate;
+DROP TRIGGER IF EXISTS triggerFineCheck;
+
+-- 3. Create main table 'Library'
+CREATE TABLE Library (
+    bid INT PRIMARY KEY,
+    bname VARCHAR(200),
+    doi DATE,
+    status VARCHAR(50),
+    noc INT
+);
+
+-- 4. Create audit table 'Library_Audit'
+CREATE TABLE Library_Audit (
+    auditId INT AUTO_INCREMENT PRIMARY KEY,
+    bid INT,
+    bname VARCHAR(200),
+    noc INT,
+    actionType VARCHAR(50),
+    timestampofquery TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    fine INT DEFAULT 0
+);
+
+-- 5. Create trigger for updating number of copies (noc)
+DELIMITER $$
+CREATE TRIGGER triggerAfterInsertOrUpdate
+AFTER INSERT ON Library
+FOR EACH ROW
+BEGIN
+    IF NEW.status = 'RETURN' THEN
+        -- Increase number of copies if returned
+        INSERT INTO Library_Audit (bid, bname, noc, actionType)
+        VALUES (NEW.bid, NEW.bname, NEW.noc + 1, 'RETURN');
+    ELSEIF NEW.status = 'ISSUE' THEN
+        -- Decrease number of copies if issued
+        INSERT INTO Library_Audit (bid, bname, noc, actionType)
+        VALUES (NEW.bid, NEW.bname, NEW.noc - 1, 'ISSUE');
+    END IF;
+END$$
+DELIMITER ;
+
+-- 6. Create trigger for fine calculation
+DELIMITER $$
+CREATE TRIGGER triggerFineCheck
+AFTER UPDATE ON Library
+FOR EACH ROW
+BEGIN
+    DECLARE daysDifference INT DEFAULT 0;
+
+    -- Calculate days difference
+    SET daysDifference = DATEDIFF(CURDATE(), OLD.doi);
+
+    -- If more than 20 days have passed, log it in the Audit table
+    IF daysDifference > 20 THEN
+        INSERT INTO Library_Audit (bid, bname, noc, actionType, fine)
+        VALUES (OLD.bid, OLD.bname, OLD.noc, 'FINE', daysDifference * 10);
+    END IF;
+END$$
+DELIMITER ;
+
+-- SHOW TRIGGERS WHERE `Table` = 'Library';
+-- FLUSH TABLES;
+
+
+-- 7. Sample Data
+INSERT INTO Library (bid, bname, doi, status, noc) 
+VALUES (1, 'Database Systems', '2024-04-15', 'ISSUE', 5);
+
+INSERT INTO Library (bid, bname, doi, status, noc) 
+VALUES (2, 'Operating Systems', '2024-04-20', 'RETURN', 3);
+
+-- 8. Test Scenarios:
+-- Update to 'RETURN' -> should increase the number of copies
+UPDATE Library SET status = 'RETURN' WHERE bid = 1;
+
+-- Update to 'ISSUE' -> should decrease the number of copies
+UPDATE Library SET status = 'ISSUE' WHERE bid = 2;
+
+-- Update to trigger fine (no internal update, just logs to Audit)
+UPDATE Library SET doi = '2024-03-01' WHERE bid = 1;
+
+-- 9. View Audit Logs
+SELECT * FROM Library_Audit;
+SELECT * FROM Library;
+
+
+4]
+-- 1. Create and use database
+DROP DATABASE IF EXISTS v4;
+CREATE DATABASE v4;
+USE v4;
+
+-- 2. Drop tables if exist (to avoid errors if running multiple times)
+DROP TABLE IF EXISTS libraryAudit;
+DROP TABLE IF EXISTS lib;
+
+DROP TRIGGER IF EXISTS triggerAfterUpdate;
+DROP TRIGGER IF EXISTS triggerAfterDelete;
+
+-- 3. Create main table 'lib'
+CREATE TABLE lib (
+    bid INT PRIMARY KEY,
+    bname VARCHAR(200),
+    doi DATE,
+    bstatus VARCHAR(200)
+);
+
+-- 4. Create audit table 'libraryAudit' with auto-increment PK auditId
+CREATE TABLE libraryAudit (
+    auditId INT AUTO_INCREMENT PRIMARY KEY,  -- unique audit record ID
+    bid INT,
+    bname VARCHAR(200),
+    doi DATE,
+    actionType VARCHAR(200)
+);
+
+-- 5. Create trigger to log updates
+DELIMITER $$
+CREATE TRIGGER triggerAfterUpdate
+AFTER UPDATE ON lib
+FOR EACH ROW
+BEGIN
+    INSERT INTO libraryAudit (bid, bname, doi, actionType)
+    VALUES (OLD.bid, OLD.bname, OLD.doi, 'Update');
+END$$
+DELIMITER ;
+
+-- 6. Create trigger to log deletes
+DELIMITER $$
+CREATE TRIGGER triggerAfterDelete
+AFTER DELETE ON lib
+FOR EACH ROW
+BEGIN
+    INSERT INTO libraryAudit (bid, bname, doi, actionType)
+    VALUES (OLD.bid, OLD.bname, OLD.doi, 'Delete');
+END$$
+DELIMITER ;
+
+-- 7. Insert sample data into lib
+INSERT INTO lib (bid, bname, doi, bstatus) VALUES (1, 'ABC', '2024-05-01', 'I');
+
+-- 8. Update to trigger update log
+UPDATE lib SET bstatus = 'R' WHERE bid = 1;
+
+-- 9. Delete to trigger delete log
+DELETE FROM lib WHERE bid = 1;
+
+-- 10. View audit logs
+SELECT * FROM libraryAudit;
+
+
+6]
+show databases;
+drop database v6;
+CREAte database v6;
+use v6;
+-- 1. Create Tables
+DROP TABLE IF EXISTS Categories;
+DROP TABLE IF EXISTS CitiesIndia;
+
+CREATE TABLE CitiesIndia (
+    pincode INT PRIMARY KEY,
+    nameofcity VARCHAR(100),
+    earliername VARCHAR(100),
+    area DECIMAL(10, 2),          
+    population INT,
+    avgrainfall DECIMAL(7, 2)     
+);
+
+CREATE TABLE Categories (
+    Type VARCHAR(50),
+    pincode INT PRIMARY KEY
+);
+
+-- 2. Sample Data Insertion (for testing)
+INSERT INTO CitiesIndia (pincode, nameofcity, earliername, area, population, avgrainfall) VALUES
+(110001, 'New Delhi', 'Delhi', 4, 25000, 800.5),
+(400001, 'Mumbai', 'Bombay', 603.4, 18000, 2540.0),
+(560001, 'Bangalore', 'Bengaluru', 709.5, 15800, 970.1),
+(600001, 'Chennai', 'Madras', 426.0, 12000, 1390.1);
+
+-- 3. Procedure to Calculate Population Density and Insert into Categories
+DELIMITER $$
+CREATE PROCEDURE UpdateCityDensity()
+BEGIN
+    DECLARE city_density DECIMAL(10, 2);
+    DECLARE v_pincode INT;
+    DECLARE v_population INT;
+    DECLARE v_area DECIMAL(10, 2);
+    DECLARE done INT DEFAULT 0;
+
+    DECLARE city_cursor CURSOR FOR 
+        SELECT pincode, population, area FROM CitiesIndia;
+
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+    OPEN city_cursor;
+
+    read_loop: LOOP
+        FETCH city_cursor INTO v_pincode, v_population, v_area;
+
+        IF done = 1 THEN 
+            LEAVE read_loop; 
+        END IF;
+
+        -- Error condition
+        IF v_population < 10 OR v_population > 25718 THEN
+            SIGNAL SQLSTATE '45000' 
+            SET MESSAGE_TEXT = 'Population must be between 10 and 25718';
+        END IF;
+
+        -- Calculate density
+        SET city_density = v_population / v_area;
+
+        -- Insert based on density
+        IF city_density > 3000 THEN
+            INSERT INTO Categories (Type, pincode) VALUES ('High Density', v_pincode);
+        ELSEIF city_density BETWEEN 1000 AND 2999 THEN
+            INSERT INTO Categories (Type, pincode) VALUES ('Moderate Density', v_pincode);
+        ELSE
+            INSERT INTO Categories (Type, pincode) VALUES ('Low Density', v_pincode);
+        END IF;
+    END LOOP;
+
+    CLOSE city_cursor;
+END$$
+DELIMITER ;
+TRUNCATE TABLE Categories;
+-- 4. Run the Procedure
+CALL UpdateCityDensity();
+
+-- 5. Verify the Categories
+SELECT * FROM Categories;
+
+
+7]
+create table student(
+	rollno int primary key,
+    name varchar(100),
+    Marks1 int,
+    marks2 int,
+    marks3 int,
+    marks4 int,
+    marks5 int
+);
+
+create table result(
+	rollno int,
+    totalM int,
+    class varchar(225)
+);
+
+INSERT INTO STUDENT(rollno,name,marks1,marks2,marks3,marks4,marks5) values
+	(2,'v',90,90,90,90,90);
+
+DELIMITER $$
+create function category(total int)
+returns varchar(100)
+deterministic
+begin
+	declare class varchar(100);
+    if total between 1499 and 900 then
+		set class = 'Distinction';
+	elseif total between 899 and 825 then
+		set class = 'First class';
+	else 
+		set class = 'Second class';
+	end if;
+    
+    return class;
+END $$ 
+Delimiter ;
+
+DELIMITER $$ 
+create procedure main()
+begin
+	declare roll int;
+    declare done int default 0;
+    declare m1 int;
+    declare m2 int;
+    declare m3 int;
+    declare m4 int;
+    declare m5 int;
+    declare total int;
+    declare class varchar(100);
+	
+    declare cur cursor for
+		select rollno,marks1,marks2,marks3,marks4,marks5 from student;
+        
+	declare continue handler for not found set done = 1;
+    
+    open cur;
+    read_loop:LOOP
+		fetch cur into roll,m1,m2,m3,m4,m5;
+        if done then
+         leave read_loop;
+		end if;
+        
+        IF m1 < 0 OR m1 > 100 OR
+           m2 < 0 OR m2 > 100 OR
+           m3 < 0 OR m3 > 100 OR
+           m4 < 0 OR m4 > 100 OR
+           m5 < 0 OR m5 > 100 THEN
+            SIGNAL SQLSTATE '45000'
+            SET MESSAGE_TEXT = 'Invalid marks for Roll No: ';
+        END IF;
+        
+        set total = m1+m2+m3+m4+m5;
+        set class = category(total);
+        
+        insert into result(rollno,totalM,class) values(roll,total,class);
+	end loop;
+    close cur;
+end $$
+DELIMITER ;
+
+call main();
+select * from result;
+
+
+8]
+create database v8;
+use v8;
+-- Publisher Table
+CREATE TABLE Publisher (
+    PublisherID INT PRIMARY KEY,
+    Name VARCHAR(100) NOT NULL,
+    Address VARCHAR(255)
+);
+
+-- Author Table
+CREATE TABLE Author (
+    AuthorID INT PRIMARY KEY,
+    Name VARCHAR(100) NOT NULL
+);
+
+-- Book Table
+CREATE TABLE Book (
+    BookID INT PRIMARY KEY AUTO_INCREMENT ,
+    Title VARCHAR(200) NOT NULL,
+    ISBN VARCHAR(20) UNIQUE,
+    PublicationYear INT,
+    PublisherID INT,
+    FOREIGN KEY (PublisherID) REFERENCES Publisher(PublisherID)
+);
+
+-- BookAuthor Table (Many-to-Many relationship between Book and Author)
+CREATE TABLE BookAuthor (
+    BookID INT,
+    AuthorID INT,
+    PRIMARY KEY (BookID, AuthorID),
+    FOREIGN KEY (BookID) REFERENCES Book(BookID),
+    FOREIGN KEY (AuthorID) REFERENCES Author(AuthorID)
+);
+
+-- Member Table
+CREATE TABLE Member (
+    MemberID INT PRIMARY KEY,
+    Name VARCHAR(100) NOT NULL,
+    Email VARCHAR(100) UNIQUE,
+    Phone VARCHAR(15)
+);
+
+-- Loan Table
+CREATE TABLE Loan (
+    LoanID INT PRIMARY KEY,
+    BookID INT,
+    MemberID INT,
+    LoanDate DATE NOT NULL,
+    ReturnDate DATE,
+    FOREIGN KEY (BookID) REFERENCES Book(BookID),
+    FOREIGN KEY (MemberID) REFERENCES Member(MemberID)
+);
+
+
+CREATE VIEW BookDetails AS
+SELECT 
+    b.BookID,
+    b.Title,
+    b.ISBN,
+    b.PublicationYear,
+    p.Name AS PublisherName,
+    a.Name AS AuthorName
+FROM 
+    Book b
+JOIN 
+    Publisher p ON b.PublisherID = p.PublisherID
+JOIN 
+    BookAuthor ba ON b.BookID = ba.BookID
+JOIN 
+    Author a ON ba.AuthorID = a.AuthorID;
+
+
+CREATE VIEW LoanDetails AS
+SELECT 
+    l.LoanID,
+    m.Name AS MemberName,
+    b.Title AS BookTitle,
+    l.LoanDate,
+    l.ReturnDate
+FROM 
+    Loan l
+JOIN 
+    Member m ON l.MemberID = m.MemberID
+JOIN 
+    Book b ON l.BookID = b.BookID;
+
+CREATE INDEX Lib_Index1 ON Author(Name ASC);
+
+
+9]
+
+CREATE DATABASE v9;
+use v9;
+drop database v9;
+
+-- 1. Schema Definition
+DROP TABLE IF EXISTS Borrower;
+DROP TABLE IF EXISTS Fine;
+DROP TABLE IF EXISTS Library;
+DROP TABLE IF EXISTS Transaction;
+
+CREATE TABLE Borrower (
+    RollNo INT PRIMARY KEY,
+    Name VARCHAR(100),
+    DateofIssue DATE,
+    NameofBook VARCHAR(200),
+    Status VARCHAR(10)
+);
+
+CREATE TABLE Fine (
+    RollNo INT,
+    Date DATE,
+    Amt DECIMAL(10, 2)
+);
+
+CREATE TABLE Library (
+    bid INT PRIMARY KEY,
+    bname VARCHAR(200),
+    doi DATE,
+    status VARCHAR(10),
+    noc INT
+);
+
+CREATE TABLE Transaction (
+    tid INT PRIMARY KEY AUTO_INCREMENT,
+    bid INT,
+    bname VARCHAR(200),
+    status VARCHAR(10)
+);
+
+-- 2. Sample Data Insertion
+INSERT INTO Borrower VALUES (1, 'John Doe', '2025-04-01', 'Operating Systems', 'I');
+INSERT INTO Library VALUES (101, 'Operating Systems', '2025-04-01', 'I', 10);
+
+-- 3. PL/SQL Block for Book Return and Fine Calculation
+DELIMITER $$
+CREATE PROCEDURE ReturnBook(IN p_roll_no INT, IN p_book_name VARCHAR(200))
+BEGIN
+    DECLARE daysDifference INT DEFAULT 0;
+    DECLARE fineAmount DECIMAL(10, 2) DEFAULT 0;
+    DECLARE bookStatus VARCHAR(10);
+
+    -- Get days difference from Date of Issue
+    SELECT DATEDIFF(CURDATE(), DateofIssue) INTO daysDifference
+    FROM Borrower
+    WHERE RollNo = p_roll_no AND NameofBook = p_book_name;
+
+    -- Fine Calculation Logic
+    IF daysDifference BETWEEN 15 AND 30 THEN
+        SET fineAmount = daysDifference * 5;
+    ELSEIF daysDifference > 30 THEN
+        SET fineAmount = (30 * 5) + ((daysDifference - 30) * 50);
+    END IF;
+
+    -- Update Status and Number of Copies
+    UPDATE Borrower SET Status = 'R'
+    WHERE RollNo = p_roll_no AND NameofBook = p_book_name;
+
+    UPDATE Library SET noc = noc + 1, status = 'R'
+    WHERE bname = p_book_name;
+
+    -- Insert into Transaction Table
+    INSERT INTO Transaction (bid, bname, status)
+    SELECT bid, bname, 'RETURN' FROM Library WHERE bname = p_book_name;
+
+    -- If fine exists, insert into Fine table
+    IF fineAmount > 0 THEN
+        INSERT INTO Fine (RollNo, Date, Amt) VALUES (p_roll_no, CURDATE(), fineAmount);
+    END IF;
+
+END$$
+DELIMITER ;
+
+-- 4. Execute Procedure
+SET SQL_SAFE_UPDATES = 0;
+CALL ReturnBook(1, 'Operating Systems');
+
+-- 5. Verify the Result
+SELECT * FROM Borrower;
+SELECT * FROM Library;
+SELECT * FROM Fine;
+SELECT * FROM Transaction;
+
+
+10]
+
+create database v10;
+use v10;
+drop database v10;
+
+-- 1️⃣ Drop existing objects to avoid conflicts
+DROP TABLE IF EXISTS Borrower;
+DROP VIEW IF EXISTS ActiveBorrowers;
+
+-- 2️⃣ Create the Table
+CREATE TABLE Borrower (
+    Rollin INT PRIMARY KEY AUTO_INCREMENT,
+    Name VARCHAR(100),
+    DateofIssue DATE,
+    NameofBook VARCHAR(100),
+    Status VARCHAR(20)
+);
+
+-- 3️⃣ Create the View to show only currently issued books
+CREATE VIEW ActiveBorrowers AS
+SELECT Rollin, Name, NameofBook, DateofIssue
+FROM Borrower
+WHERE Status = 'I'; -- 'I' stands for Issued
+
+-- 4️⃣ Create the Index on the NameofBook column for faster search
+CREATE INDEX idx_BookName ON Borrower (NameofBook);
+
+-- 5️⃣ Insert Sample Data
+INSERT INTO Borrower (Name, DateofIssue, NameofBook, Status) 
+VALUES ('Alice', '2025-05-10', 'Database Systems', 'I'),
+       ('Bob', '2025-05-12', 'Operating Systems', 'I'),
+       ('Charlie', '2025-05-14', 'Computer Networks', 'R');
+
+-- 6️⃣ Testing the View
+SELECT * FROM ActiveBorrowers;
+
+-- 7️⃣ Testing the Index (You can check the performance with EXPLAIN)
+EXPLAIN SELECT * FROM Borrower WHERE NameofBook = 'Database Systems';
+
+-- 8️⃣ To drop the index if needed
+DROP INDEX idx_BookName ON Borrower;
+
+-- synonym
+CREATE VIEW Syn_Borrower AS SELECT * FROM Borrower;
+SELECT * FROM Syn_Borrower;
+
+
+11]
+
+create database v11;
+use v11;
+drop database v11;
+
+DROP VIEW IF EXISTS StudentDetails;
+DROP TABLE IF EXISTS Enrollments;
+DROP TABLE IF EXISTS Courses;
+DROP TABLE IF EXISTS Students;
+DROP TABLE IF EXISTS Departments;
+
+-- 2️⃣ Create Tables
+CREATE TABLE Departments (
+    DepartmentID INT PRIMARY KEY AUTO_INCREMENT,
+    DepartmentName VARCHAR(100)
+);
+
+CREATE TABLE Students (
+    StudentID INT PRIMARY KEY AUTO_INCREMENT,
+    Name VARCHAR(100),
+    Age INT,
+    DepartmentID INT,
+    FOREIGN KEY (DepartmentID) REFERENCES Departments(DepartmentID)
+);
+
+CREATE TABLE Courses (
+    CourseID INT PRIMARY KEY AUTO_INCREMENT,
+    CourseName VARCHAR(100),
+    DepartmentID INT,
+    FOREIGN KEY (DepartmentID) REFERENCES Departments(DepartmentID)
+);
+
+CREATE TABLE Enrollments (
+    StudentID INT,
+    CourseID INT,
+    EnrollDate DATE,
+    PRIMARY KEY (StudentID, CourseID),
+    FOREIGN KEY (StudentID) REFERENCES Students(StudentID),
+    FOREIGN KEY (CourseID) REFERENCES Courses(CourseID)
+);
+
+-- 3️⃣ Insert Sample Data
+INSERT INTO Departments (DepartmentName) VALUES
+('Computer Science'),
+('Information Technology'),
+('Electronics');
+
+INSERT INTO Students (Name, Age, DepartmentID) VALUES
+('Alice', 20, 1),
+('Bob', 22, 1),
+('Charlie', 21, 2),
+('David', 23, 3);
+
+INSERT INTO Courses (CourseName, DepartmentID) VALUES
+('Data Structures', 1),
+('Operating Systems', 1),
+('Database Management', 2),
+('Digital Circuits', 3);
+
+INSERT INTO Enrollments (StudentID, CourseID, EnrollDate) VALUES
+(1, 1, '2025-04-12'),
+(1, 2, '2025-04-13'),
+(2, 1, '2025-04-14'),
+(3, 3, '2025-04-15');
+
+
+-- ✅ 1. INNER JOIN - Simple Students with their enrolled courses
+SELECT s.StudentID, s.Name, c.CourseName
+FROM Students s
+INNER JOIN Enrollments e ON s.StudentID = e.StudentID
+INNER JOIN Courses c ON e.CourseID = c.CourseID;
+
+-- ✅ 2. LEFT JOIN - All students and their enrolled courses
+SELECT s.StudentID, s.Name, c.CourseName
+FROM Students s
+LEFT JOIN Enrollments e ON s.StudentID = e.StudentID
+LEFT JOIN Courses c ON e.CourseID = c.CourseID;
+
+-- ✅ 3. RIGHT JOIN - All courses and the students enrolled
+SELECT c.CourseID, c.CourseName, s.Name
+FROM Courses c
+RIGHT JOIN Enrollments e ON c.CourseID = e.CourseID
+RIGHT JOIN Students s ON e.StudentID = s.StudentID;
+
+-- ✅ 4. FULL OUTER JOIN - All students and courses
+SELECT s.Name AS StudentName, c.CourseName
+FROM Students s
+LEFT JOIN Enrollments e ON s.StudentID = e.StudentID
+LEFT JOIN Courses c ON e.CourseID = c.CourseID
+UNION
+SELECT s.Name AS StudentName, c.CourseName
+FROM Students s
+RIGHT JOIN Enrollments e ON s.StudentID = e.StudentID
+RIGHT JOIN Courses c ON e.CourseID = c.CourseID;
+
+-- ✅ 5. SELF JOIN - Students in the same department
+SELECT s1.Name AS Student1, s2.Name AS Student2
+FROM Students s1
+INNER JOIN Students s2 ON s1.DepartmentID = s2.DepartmentID AND s1.StudentID < s2.StudentID;
+
+-- ✅ 6. SUBQUERY - Students not enrolled in any course
+SELECT Name 
+FROM Students 
+WHERE StudentID NOT IN (SELECT StudentID FROM Enrollments);
+
+-- ✅ 7. CORRELATED SUBQUERY - Students with the number of courses
+SELECT s.Name, (
+    SELECT COUNT(*) 
+    FROM Enrollments e 
+    WHERE e.StudentID = s.StudentID
+) AS CourseCount
+FROM Students s;
+
+-- ✅ 8. VIEW - Students with their department names
+CREATE VIEW StudentDetails AS
+SELECT s.StudentID, s.Name, d.DepartmentName
+FROM Students s
+INNER JOIN Departments d ON s.DepartmentID = d.DepartmentID;
+
+-- ✅ 9. AGGREGATE with GROUP BY - Number of students in each department
+SELECT d.DepartmentName, COUNT(s.StudentID) AS StudentCount
+FROM Departments d
+LEFT JOIN Students s ON d.DepartmentID = s.DepartmentID
+GROUP BY d.DepartmentName;
+
+-- ✅ 10. HAVING - Departments with more than 1 student
+SELECT d.DepartmentName, COUNT(s.StudentID) AS StudentCount
+FROM Departments d
+LEFT JOIN Students s ON d.DepartmentID = s.DepartmentID
+GROUP BY d.DepartmentName
+HAVING COUNT(s.StudentID) > 1;
+
+-- ✅ 11. Testing the View
+SELECT * FROM StudentDetails;
+
+13]
+
+create database v13;
+use v13;
+drop database v13;
+
+DROP TABLE IF EXISTS DEPENDENT;
+DROP TABLE IF EXISTS WORKS_ON;
+DROP TABLE IF EXISTS PROJECT;
+DROP TABLE IF EXISTS DEPT_LOCATIONS;
+DROP TABLE IF EXISTS DEPARTMENT;
+DROP TABLE IF EXISTS EMPLOYEE;
+
+-- 2️⃣ Create Tables
+CREATE TABLE DEPARTMENT (
+    Dname VARCHAR(100),
+    Dno INT PRIMARY KEY,
+    Mgr_ssn VARCHAR(15),
+    Mgr_start_date DATE
+);
+
+CREATE TABLE EMPLOYEE (
+    Fname VARCHAR(100),
+    Minit VARCHAR(5),
+    Lname VARCHAR(100),
+    Ssn VARCHAR(15) PRIMARY KEY,
+    Bdate DATE,
+    Address VARCHAR(200),
+    Sex VARCHAR(1),
+    Salary DECIMAL(10, 2),
+    Dno INT,
+    FOREIGN KEY (Dno) REFERENCES DEPARTMENT(Dno)
+);
+
+CREATE TABLE DEPT_LOCATIONS (
+    Dnumber INT,
+    Dlocation VARCHAR(100),
+    FOREIGN KEY (Dnumber) REFERENCES DEPARTMENT(Dno)
+);
+
+CREATE TABLE PROJECT (
+    Pname VARCHAR(100),
+    Pnumber INT PRIMARY KEY,
+    Plocation VARCHAR(100),
+    Dno INT,
+    FOREIGN KEY (Dno) REFERENCES DEPARTMENT(Dno)
+);
+
+CREATE TABLE WORKS_ON (
+    Essn VARCHAR(15),
+    Pno INT,
+    Hours DECIMAL(5, 2),
+    PRIMARY KEY (Essn, Pno),
+    FOREIGN KEY (Essn) REFERENCES EMPLOYEE(Ssn),
+    FOREIGN KEY (Pno) REFERENCES PROJECT(Pnumber)
+);
+
+CREATE TABLE DEPENDENT (
+    Essn VARCHAR(15),
+    Dependent_name VARCHAR(100),
+    Sex VARCHAR(1),
+    Bdate DATE,
+    Relationship VARCHAR(50),
+    FOREIGN KEY (Essn) REFERENCES EMPLOYEE(Ssn)
+);
+
+-- 3️⃣ Insert Sample Data
+INSERT INTO DEPARTMENT (Dname, Dno, Mgr_ssn, Mgr_start_date) VALUES
+('Research', 1, '123456789', '2018-06-12'),
+('Administration', 2, '987654321', '2019-09-21');
+
+INSERT INTO EMPLOYEE (Fname, Minit, Lname, Ssn, Bdate, Address, Sex, Salary, Dno) VALUES
+('John', 'A', 'Doe', '123456789', '1980-03-25', '123 Elm St, Houston, Texas', 'M', 50000, 1),
+('Jane', 'B', 'Smith', '987654321', '1985-07-13', '456 Oak St, Dallas, Texas', 'F', 60000, 2);
+
+INSERT INTO DEPT_LOCATIONS (Dnumber, Dlocation) VALUES
+(1, 'Houston'),
+(2, 'Dallas');
+
+INSERT INTO PROJECT (Pname, Pnumber, Plocation, Dno) VALUES
+('ProductX', 101, 'Stafford', 1),
+('ProductY', 102, 'Dallas', 2);
+
+INSERT INTO WORKS_ON (Essn, Pno, Hours) VALUES
+('123456789', 101, 32.5),
+('987654321', 102, 20.0);
+
+-- 4️⃣ Queries
+
+-- ✅ 1. Projects in 'Stafford': project number, department number, manager's last name, address, and birth date
+SELECT p.Pnumber, p.Dno, e.Lname, e.Address, e.Bdate
+FROM PROJECT p
+JOIN DEPARTMENT d ON p.Dno = d.Dno
+JOIN EMPLOYEE e ON d.Mgr_ssn = e.Ssn
+WHERE p.Plocation = 'Stafford';
+
+-- ✅ 2. Project numbers involving an employee with last name 'Smith'
+SELECT p.Pnumber
+FROM PROJECT p
+JOIN WORKS_ON w ON p.Pnumber = w.Pno
+JOIN EMPLOYEE e ON w.Essn = e.Ssn
+WHERE e.Lname = 'Smith'
+UNION 
+-- Smith as a Manager:
+SELECT p.Pnumber
+FROM PROJECT p
+JOIN DEPARTMENT d ON p.Dno = d.Dno
+JOIN EMPLOYEE e ON d.Mgr_ssn = e.Ssn
+WHERE e.Lname = 'Smith';
+
+
+-- ✅ 3. Employees in 'Houston, Texas'
+SELECT *
+FROM EMPLOYEE
+WHERE Address LIKE '%Houston, Texas%';
+
+-- ✅ 4. Show salaries if employees working on 'ProductX' get a 10% raise
+SELECT e.Fname, e.Lname, e.Salary * 1.1 AS NewSalary
+FROM EMPLOYEE e
+JOIN WORKS_ON w ON e.Ssn = w.Essn
+JOIN PROJECT p ON w.Pno = p.Pnumber
+WHERE p.Pname = 'ProductX';
+
+14 15 18 19]
+
+create database v14;
+use v14;
+CREATE TABLE Account (
+  acc_no INT PRIMARY KEY,
+  branch_name VARCHAR(50),
+  balance DECIMAL(10,2)
+);
+
+CREATE TABLE Branch (
+  branch_name VARCHAR(50) PRIMARY KEY,
+  branch_city VARCHAR(50),
+  assets DECIMAL(15,2)
+);
+
+CREATE TABLE Customer (
+  cust_name VARCHAR(50),
+  cust_street VARCHAR(100),
+  cust_city VARCHAR(50)
+);
+
+CREATE TABLE Depositor (
+  cust_name VARCHAR(50),
+  acc_no INT
+);
+
+CREATE TABLE Loan (
+  loan_no INT PRIMARY KEY,
+  branch_name VARCHAR(50),
+  amount DECIMAL(10,2)
+);
+
+CREATE TABLE Borrower (
+  cust_name VARCHAR(50),
+  loan_no INT
+);
+
+-- Branches
+INSERT INTO Branch VALUES 
+('Mumbai', 'Mumbai', 5000000),
+('Delhi', 'Delhi', 6000000),
+('Chennai', 'Chennai', 4000000);
+
+-- Accounts
+INSERT INTO Account VALUES 
+(101, 'Mumbai', 15000),
+(102, 'Mumbai', 18000),
+(103, 'Delhi', 10000),
+(104, 'Delhi', 14000),
+(105, 'Chennai', 8000);
+
+-- Customers
+INSERT INTO Customer VALUES 
+('Amit', 'MG Road', 'Mumbai'),
+('Neha', 'Ring Road', 'Delhi'),
+('Rahul', 'Anna Nagar', 'Chennai'),
+('Priya', 'HSR Layout', 'Bangalore');
+
+-- Depositors
+INSERT INTO Depositor VALUES 
+('Amit', 101),
+('Neha', 103),
+('Neha', 104),
+('Rahul', 105),
+('Priya', 102);
+
+-- Loans
+INSERT INTO Loan VALUES 
+(201, 'Mumbai', 30000),
+(202, 'Delhi', 40000),
+(203, 'Chennai', 25000);
+
+-- Borrowers
+INSERT INTO Borrower VALUES 
+('Amit', 201),
+('Rahul', 202),
+('Priya', 203);
+
+
+SELECT branch_name, AVG(balance) AS avg_balance
+FROM Account
+GROUP BY branch_name;
+
+SELECT A.branch_name, COUNT(DISTINCT D.cust_name) AS num_depositors
+FROM Account A
+JOIN Depositor D ON A.acc_no = D.acc_no
+GROUP BY A.branch_name;
+
+SELECT branch_name
+FROM Account
+GROUP BY branch_name
+HAVING AVG(balance) > 12000;
+
+SELECT COUNT(*) AS total_customers
+FROM Customer;
+
+
+
+
+-- 1. Find the names of all branches in the loan relation
+SELECT DISTINCT branch_name
+FROM Loan;
+-- --2
+SELECT loan_no
+FROM Loan
+WHERE branch_name = 'Mumbai' AND amount > 12000;
+
+-- 3
+SELECT DISTINCT cust_name
+FROM Borrower;
+
+-- 4
+SELECT B.cust_name, L.loan_no, L.amount
+FROM Borrower B
+JOIN Loan L ON B.loan_no = L.loan_no;
+
+
+-- 18
+
+-- 1
+SELECT cust_name FROM Depositor
+UNION
+SELECT cust_name FROM Borrower;
+
+-- 2
+SELECT cust_name
+FROM Depositor 
+WHERE cust_name IN (SELECT cust_name FROM Borrower);
+
+-- 3
+SELECT DISTINCT D.cust_name
+FROM Depositor D
+WHERE D.cust_name NOT IN (SELECT cust_name FROM Borrower);
+
+-- 4
+SELECT branch_name, AVG(balance) AS avg_balance
+FROM Account
+WHERE branch_name = 'Mumbai'
+group by branch_name;
+
+
+-- 19
+-- 1
+SELECT SUM(amount) AS total_loan_amount
+FROM Loan;
+
+-- 2
+SELECT * FROM LOAN;
+SET SQL_SAFE_UPDATES=0;
+DELETE FROM Loan
+WHERE amount BETWEEN 13000 AND 26000;
+
+-- 3
+-- Step 1: Delete from Borrower (based on Loan → Branch)
+DELETE FROM Borrower
+WHERE loan_no IN (
+    SELECT loan_no FROM Loan
+    WHERE branch_name IN (
+        SELECT branch_name FROM Branch WHERE branch_city = 'Nigdi'
+    )
+);
+
+-- Step 2: Delete from Depositor (based on Account → Branch)
+DELETE FROM Depositor
+WHERE acc_no IN (
+    SELECT acc_no FROM Account
+    WHERE branch_name IN (
+        SELECT branch_name FROM Branch WHERE branch_city = 'Nigdi'
+    )
+);
+
+-- Step 3: Delete from Loan
+DELETE FROM Loan
+WHERE branch_name IN (
+    SELECT branch_name FROM Branch WHERE branch_city = 'Nigdi'
+);
+
+-- Step 4: Delete from Account
+DELETE FROM Account
+WHERE branch_name IN (
+    SELECT branch_name FROM Branch WHERE branch_city = 'Nigdi'
+);
+
+-- Step 5: Delete from Branch
+DELETE FROM Branch
+WHERE branch_city = 'Nigdi';
+
+
+16]
+create database v16;
+use v16;
+-- Dropping tables if they already exist
+DROP TABLE IF EXISTS StudentMarks;
+DROP TABLE IF EXISTS StudentResults;
+
+-- Creating StudentMarks Table
+CREATE TABLE StudentMarks (
+    RollNo INT PRIMARY KEY,
+    Name VARCHAR(100),
+    Subject1 INT,
+    Subject2 INT,
+    Subject3 INT,
+    Subject4 INT
+);
+
+-- Creating StudentResults Table
+CREATE TABLE StudentResults (
+    RollNo INT PRIMARY KEY,
+    Name VARCHAR(100),
+    TotalMarks INT,
+    Percentage DECIMAL(5, 2)
+);
+
+-- Inserting Sample Data
+INSERT INTO StudentMarks (RollNo, Name, Subject1, Subject2, Subject3, Subject4) VALUES
+(1, 'Alice', 85, 90, 78, 88),
+(2, 'Bob', 72, 80, 65, 70),
+(3, 'Charlie', 60, 50, 75, 80);
+
+-- ===============================
+-- 📌 PL/SQL Procedure
+-- ===============================
+DELIMITER $$
+
+CREATE PROCEDURE CalculateTotalAndPercentage()
+BEGIN
+    -- Insert directly from a SELECT query
+    INSERT INTO StudentResults (RollNo, Name, TotalMarks, Percentage)
+    SELECT 
+        RollNo,
+        Name,
+        Subject1 + Subject2 + Subject3 + Subject4 AS TotalMarks,
+        ((Subject1 + Subject2 + Subject3 + Subject4) / 400) * 100 AS Percentage
+    FROM StudentMarks
+    ON DUPLICATE KEY UPDATE 
+        TotalMarks = VALUES(TotalMarks),
+        Percentage = VALUES(Percentage);
+END $$
+
+DELIMITER ;
+DROP PROCEDURE CalculateTotalAndPercentage;
+
+CALL CalculateTotalAndPercentage();
+
+-- View the results
+SELECT * FROM StudentResults;
+
+
+
+
+20]
+create database v20;
+use v20;
+CREATE TABLE Branch (
+  bname VARCHAR(30) PRIMARY KEY,
+  city VARCHAR(30)
+);
+
+CREATE TABLE Customers (
+  cname VARCHAR(30) PRIMARY KEY,
+  city VARCHAR(30)
+);
+
+CREATE TABLE Deposit (
+  actno INT PRIMARY KEY,
+  cname VARCHAR(30),
+  bname VARCHAR(30),
+  amount DECIMAL(10,2),
+  adate DATE,
+  FOREIGN KEY (cname) REFERENCES Customers(cname),
+  FOREIGN KEY (bname) REFERENCES Branch(bname)
+);
+
+CREATE TABLE Borrow (
+  loanno INT PRIMARY KEY,
+  cname VARCHAR(30),
+  bname VARCHAR(30),
+  amount DECIMAL(10,2),
+  FOREIGN KEY (cname) REFERENCES Customers(cname),
+  FOREIGN KEY (bname) REFERENCES Branch(bname)
+);
+-- Branches
+INSERT INTO Branch VALUES ('SBI', 'Pune');
+INSERT INTO Branch VALUES ('OBC', 'Mumbai');
+INSERT INTO Branch VALUES ('ICICI', 'Nagpur');
+
+-- Customers
+INSERT INTO Customers VALUES ('ABC', 'Pune');
+INSERT INTO Customers VALUES ('XYZ', 'Mumbai');
+INSERT INTO Customers VALUES ('DEF', 'Pune');
+INSERT INTO Customers VALUES ('PQR', 'Nagpur');
+
+
+-- Deposits
+INSERT INTO Deposit VALUES (101, 'ABC', 'SBI', 5000.00,'2024-06-01');
+INSERT INTO Deposit VALUES (102, 'XYZ', 'OBC', 7000.00, '2024-06-10');
+INSERT INTO Deposit VALUES (103, 'XYZ', 'ICICI', 8000.00, '2024-06-12');
+INSERT INTO Deposit VALUES (104, 'PQR', 'ICICI', 9000.00, '2024-06-15');
+
+
+-- Borrows
+INSERT INTO Borrow VALUES (201, 'ABC', 'SBI', 15000.00);
+INSERT INTO Borrow VALUES (202, 'DEF', 'ICICI', 12000.00);
+INSERT INTO Borrow VALUES (203, 'PQR', 'ICICI', 18000.00);
+
+-- 20
+SELECT adate
+FROM Deposit
+WHERE cname = 'ABC';
+
+ALTER TABLE Deposit
+MODIFY amount DECIMAL(12,2);
+
+SELECT cname
+FROM Customers
+WHERE city = 'Pune';
+
+SELECT city
+FROM Branch
+WHERE bname = 'OBC';
+
+SELECT COUNT(*) AS total_customers
+FROM Customers;
+
+
+-- 21
+SELECT d.cname
+FROM Deposit d
+JOIN Customers c ON d.cname = c.cname
+JOIN Branch b ON d.bname = b.bname
+WHERE c.city = 'Mumbai' AND b.city = 'Nagpur';
+
+
+SELECT DISTINCT d.cname
+FROM Deposit d
+JOIN Customers c ON d.cname = c.cname
+JOIN Branch b ON d.bname = b.bname
+WHERE c.city = b.city;
+
+SELECT DISTINCT c.cname
+FROM Customers c
+JOIN Deposit d ON c.cname = d.cname
+JOIN Borrow b ON c.cname = b.cname
+WHERE c.city = 'Nagpur';
+
+-- 22
+SELECT loanno, amount
+FROM Borrow
+WHERE bname = (
+    SELECT bname
+    FROM Deposit
+    WHERE cname = 'ABC'
+    LIMIT 1
+);
+
+SELECT d.*, b.*
+FROM Customers c1
+JOIN Deposit d ON c1.cname = d.cname
+JOIN Borrow b ON c1.cname = b.cname
+WHERE c1.city = (
+    SELECT city
+    FROM Customers
+    WHERE cname = 'ABC'
+    LIMIT 1
+);
+
+SELECT DISTINCT b.cname
+FROM Borrow b
+JOIN Deposit d ON b.cname = d.cname
+JOIN Customers c1 ON b.cname = c1.cname
+WHERE d.amount > 1000
+  AND c1.city = (
+      SELECT city
+      FROM Customers
+      WHERE cname = 'ABC'
+      LIMIT 1
+  );
+  
+SELECT d.bname AS branch_name, c.city AS living_city
+FROM Customers c
+JOIN Deposit d ON c.cname = d.cname
+WHERE c.cname = 'ABC';
+
+
+-- 24
+SELECT d.amount
+FROM Deposit d
+JOIN Customers c ON d.cname = c.cname
+WHERE c.city = (
+    SELECT city
+    FROM Customers
+    WHERE cname = 'ABC'
+    LIMIT 1
+);
+
+SELECT 
+    SUM(amount) AS total_loan,
+    MAX(amount) AS max_loan
+FROM Borrow
+WHERE bname = (SELECT bname FROM BRANCH where city='Pune');
+
+SELECT SUM(amount) AS total_deposit
+FROM Deposit
+WHERE adate > '1998-01-01';
+
+SELECT MAX(d.amount) AS max_deposit
+FROM Deposit d
+JOIN Customers c ON d.cname = c.cname
+WHERE c.city = 'PUNE';
+
+
+
+
+26]
+create database v26;
+use v26;
+CREATE TABLE empsal(
+    empno INT PRIMARY KEY,
+    basic INT,
+    hra INT,
+    da INT,
+    total_d INT,
+    net_s INT,
+    gross_s INT
+);
+
+-- Sample Data
+INSERT INTO empsal(empno, basic, hra, da, total_d) VALUES 
+(101, 100000, 3000, 2000, 30000);
+
+DELIMITER $$
+
+CREATE PROCEDURE calTax(IN empid INT)
+BEGIN
+    DECLARE e_gross INT;
+    DECLARE e_net INT;
+    DECLARE e_tax INT;
+
+    -- Calculate gross and net salary
+    SELECT basic + hra + da, (basic + hra + da) - total_d 
+    INTO e_gross, e_net
+    FROM empsal
+    WHERE empno = empid;
+
+    -- Calculate tax based on net salary
+    IF e_net > 50000 THEN 
+        SET e_tax = e_net * 0.20;
+    ELSEIF e_net > 30000 THEN
+        SET e_tax = e_net * 0.10;
+    ELSE
+        SET e_tax = e_net * 0.05;
+    END IF;
+
+    -- Update the values in the table
+    UPDATE empsal
+    SET net_s = e_net, gross_s = e_gross
+    WHERE empno = empid;
+
+    -- Display the result
+    SELECT empid AS 'Employee number',
+           e_tax AS 'Tax Amount',
+           e_net AS 'Net Salary';
+
+END $$
+
+DELIMITER ;
+
+-- Call the procedure to calculate tax
+CALL calTax(101);
+
+
+28]
+create database v28;
+use v28;
+-- Old Roll Call Table
+CREATE TABLE O_RollCall (
+    RollNo INT PRIMARY KEY,
+    StudentName VARCHAR(100),
+    Class VARCHAR(50)
+);
+
+-- New Roll Call Table
+CREATE TABLE N_RollCall (
+    RollNo INT,
+    StudentName VARCHAR(100),
+    Class VARCHAR(50)
+);
+
+-- Sample Data for Testing
+INSERT INTO O_RollCall (RollNo, StudentName, Class) VALUES 
+(1, 'John Doe', '10th'),
+(2, 'Jane Smith', '10th');
+
+INSERT INTO N_RollCall (RollNo, StudentName, Class) VALUES 
+(1, 'John Doe', '10th'),  -- Already exists, should be skipped
+(3, 'Michael Johnson', '10th'),  -- New entry, should be inserted
+(4, 'Emily Davis', '11th'); -- New entry, should be inserted
+
+
+DELIMITER $$
+CREATE PROCEDURE MergeRollCall()
+BEGIN
+    DECLARE v_rollno INT;
+    DECLARE v_name VARCHAR(100);
+    DECLARE v_class VARCHAR(50);
+    DECLARE done INT DEFAULT 0;
+
+    -- Declare Cursor to fetch data from N_RollCall
+    DECLARE roll_cursor CURSOR FOR 
+        SELECT RollNo, StudentName, Class FROM N_RollCall;
+
+    -- Handler for cursor completion
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+    -- Open the cursor
+    OPEN roll_cursor;
+
+    -- Loop through the records
+    read_loop: LOOP
+        -- Fetch data into variables
+        FETCH roll_cursor INTO v_rollno, v_name, v_class;
+
+        -- Exit loop if no more rows
+        IF done THEN
+            LEAVE read_loop;
+        END IF;
+        -- Check if the record already exists
+        IF NOT EXISTS (SELECT 1 FROM O_RollCall WHERE RollNo = v_rollno) THEN
+            -- If it does not exist, insert into O_RollCall
+            INSERT INTO O_RollCall (RollNo, StudentName, Class) 
+            VALUES (v_rollno, v_name, v_class);
+        END IF;
+    END LOOP;
+
+    -- Close the cursor
+    CLOSE roll_cursor;
+    SELECT 'Merge Complete' AS Status;
+END $$
+DELIMITER ;
+drop procedure MergeRollCall;
+-- Call the procedure to merge data
+CALL MergeRollCall();
+
+select * from O_RollCall;
+select * from N_RollCall;
+
+
+29]
+create database v29;
+use v29;
+
+
+CREATE TABLE student_course (
+    roll_no INT PRIMARY KEY,
+    course VARCHAR(100),
+    course_cod VARCHAR(20),
+    sem INT,
+    total_marks INT,
+    percentage DECIMAL(5, 2)
+);
+
+-- Sample Data
+INSERT INTO student_course (roll_no, course, course_cod, sem, total_marks, percentage) VALUES
+(101, 'Mathematics', 'MTH101', 1, 500, 85.0),
+(102, 'Mathematics', 'MTH101', 1, 500, 72.0),
+(103, 'Physics', 'PHY101', 1, 500, 66.0),
+(104, 'Physics', 'PHY101', 1, 500, 59.0),
+(105, 'Computer Science', 'CS101', 1, 500, 45.0),
+(106, 'Computer Science', 'CS101', 1, 500, 48.0),
+(107, 'Mathematics', 'MTH101', 1, 500, 95.0),
+(108, 'Physics', 'PHY101', 1, 500, 51.0);
+
+
+DELIMITER $$
+
+CREATE PROCEDURE GetStudentRange (IN course_name VARCHAR(100))
+BEGIN
+    DECLARE total_100_70 INT DEFAULT 0;
+    DECLARE total_69_60 INT DEFAULT 0;
+    DECLARE total_59_50 INT DEFAULT 0;
+    DECLARE total_below_49 INT DEFAULT 0;
+
+    -- Calculate the number of students in each range
+    SELECT 
+        COUNT(CASE WHEN percentage BETWEEN 70 AND 100 THEN 1 END),
+        COUNT(CASE WHEN percentage BETWEEN 60 AND 69 THEN 1 END),
+        COUNT(CASE WHEN percentage BETWEEN 50 AND 59 THEN 1 END),
+        COUNT(CASE WHEN percentage < 50 THEN 1 END)
+    INTO total_100_70, total_69_60, total_59_50, total_below_49
+    FROM student_course
+    WHERE course = course_name;
+
+    -- Display the result
+    SELECT 
+        course_name AS 'Course',
+        total_100_70 AS '70-100%',
+        total_69_60 AS '60-69%',
+        total_59_50 AS '50-59%',
+        total_below_49 AS '< 50%';
+    
+END $$
+
+DELIMITER ;
+
+CALL GetStudentRange('Physics');
+
+
+30]
+create database v30;
+use v30;
+
+-- Drop existing tables if they exist
+DROP TABLE IF EXISTS Stud_Marks;
+DROP TABLE IF EXISTS Result;
+
+-- Create the Student Marks Table
+CREATE TABLE Stud_Marks (
+    roll_no INT PRIMARY KEY,
+    name VARCHAR(100),
+    total_marks INT
+);
+
+-- Create the Result Table
+CREATE TABLE Result (
+    roll_no INT PRIMARY KEY,
+    name VARCHAR(100),
+    class VARCHAR(50)
+);
+
+-- Insert Sample Data
+INSERT INTO Stud_Marks (roll_no, name, total_marks) VALUES
+(101, 'Alice', 1450),
+(102, 'Bob', 980),
+(103, 'Charlie', 920),
+(104, 'David', 850),
+(105, 'Emma', 800);
+
+DELIMITER $$
+
+CREATE PROCEDURE proc_Grade()
+BEGIN
+    DECLARE done INT DEFAULT 0;
+    DECLARE r_roll INT;
+    DECLARE r_name VARCHAR(100);
+    DECLARE r_total INT;
+    DECLARE r_class VARCHAR(50);
+
+    -- Cursor to iterate over the Stud_Marks table
+    DECLARE cur CURSOR FOR 
+        SELECT roll_no, name, total_marks FROM Stud_Marks;
+        
+    -- Handler for end of data
+    DECLARE CONTINUE HANDLER FOR NOT FOUND SET done = 1;
+
+    -- Open the cursor
+    OPEN cur;
+
+    -- Loop through each student
+    read_loop: LOOP
+        FETCH cur INTO r_roll, r_name, r_total;
+
+        -- If no more data, exit the loop
+        IF done THEN 
+            LEAVE read_loop;
+        END IF;
+
+        -- Determine the class category
+        IF r_total BETWEEN 990 AND 1500 THEN
+            SET r_class = 'Distinction';
+        ELSEIF r_total BETWEEN 900 AND 989 THEN
+            SET r_class = 'First Class';
+        ELSEIF r_total BETWEEN 825 AND 899 THEN
+            SET r_class = 'Higher Second Class';
+        ELSE
+            SET r_class = 'No Category';
+        END IF;
+
+        -- Insert or Update the Result table
+        INSERT INTO Result (roll_no, name, class) 
+        VALUES (r_roll, r_name, r_class)
+        ON DUPLICATE KEY UPDATE 
+            name = VALUES(name),
+            class = VALUES(class);
+
+    END LOOP;
+
+    -- Close the cursor
+    CLOSE cur;
+END $$
+
+DELIMITER ;
+
+-- Call the Procedure to categorize students
+CALL proc_Grade();
+
+-- Check the results
+SELECT * FROM Result;
+
+
+
+31 32]
+
+create database v31;
+use v31;
+CREATE TABLE Citydetails (
+    _id INT PRIMARY KEY,
+    name VARCHAR(50),
+    area FLOAT,
+    population_total BIGINT,
+    population_adults BIGINT,
+    population_seniorcitizens BIGINT,
+    sexratio FLOAT,
+    geography_avgtemp FLOAT,
+    geography_avgrainfall FLOAT,
+    geography_longitude FLOAT,
+    geography_latitude FLOAT
+);
+INSERT INTO Citydetails VALUES
+(1, 'Pune', 331.26, 7500000, 4500000, 1200000, 0.948, 24.5, 700, 73.8567, 18.5204),
+(2, 'Mumbai', 603.4, 20411000, 12400000, 3000000, 0.889, 27.2, 2000, 72.8777, 19.0760),
+(3, 'Delhi', 1484, 30291000, 18500000, 4000000, 0.872, 25.3, 790, 77.1025, 28.7041),
+(4, 'Bangalore', 709, 11234000, 6000000, 1500000, 0.921, 23.8, 970, 77.5946, 12.9716),
+(5, 'Hyderabad', 650, 10120000, 6000000, 1400000, 0.954, 27.0, 820, 78.4867, 17.3850),
+(6, 'Chennai', 426, 10400000, 6200000, 1400000, 0.944, 28.2, 1400, 80.2707, 13.0827),
+(7, 'Kolkata', 185, 14900000, 9000000, 1800000, 0.935, 26.9, 1600, 88.3639, 22.5726);
+
+-- 1
+SELECT population_total AS Total_Population 
+FROM Citydetails 
+WHERE name = 'Pune';
+-- 2
+SELECT name, population_total 
+FROM Citydetails 
+WHERE population_total > 10000000;
+
+-- 3
+SELECT name, AVG(population_total) AS average_population 
+FROM Citydetails 
+GROUP BY name;
+
+-- 4
+(SELECT 
+    name AS City_Name, 
+    population_total AS Population 
+ FROM Citydetails 
+ ORDER BY population_total ASC 
+ LIMIT 1)
+UNION ALL
+(SELECT 
+    name AS City_Name, 
+    population_total AS Population 
+ FROM Citydetails 
+ ORDER BY population_total DESC 
+ LIMIT 1);
+ 
+ -- 32
+ -- 1
+ SELECT area, SUM(population_total) AS total_population
+FROM Citydetails
+GROUP BY area
+ORDER BY total_population ASC;
+
+-- 2
+SELECT name, area
+FROM Citydetails
+WHERE geography_avgrainfall > 60;
+
+-- 3
+CREATE INDEX idx_name_area ON Citydetails(name, area);
+SELECT MAX(population_total) AS max_population
+FROM Citydetails
+WHERE name = 'Mumbai';
+
+-- 4
+CREATE INDEX idx_name ON Citydetails(name);
+
+
+
+MONGO:
+
+5 Create a collection sites(url,dateofaccess). Write a MapReduce function to find the no. of times a site was accessed in a month.
+// Step 1: Insert sample data into the 'sites' collection
+db.sites.insertMany([
+  { url: "example.com", dateofaccess: new Date("2025-05-10") },
+  { url: "example.com", dateofaccess: new Date("2025-05-15") },
+  { url: "example.com", dateofaccess: new Date("2025-06-01") },
+  { url: "google.com", dateofaccess: new Date("2025-05-20") },
+  { url: "google.com", dateofaccess: new Date("2025-05-22") }
+]);
+
+
+// Step 2: Define the Map function
+// This function emits a key for each site and month-year, with a count of 1
+var mapFunction = function() {
+  var date = new Date(this.dateofaccess);
+  var month = date.getMonth() + 1;  // getMonth() returns 0-11, so add 1
+  var year = date.getFullYear();
+
+
+  // Format key as "url_yyyy-mm", with leading zero for month if needed
+  var key = this.url + "_" + year + "-" + (month < 10 ? "0" + month : month);
+
+
+  emit(key, 1);  // Emit key with value 1 for each access
+};
+
+
+// Step 3: Define the Reduce function
+// This function sums all the counts for the same key
+var reduceFunction = function(key, values) {
+  return Array.sum(values);
+};
+
+
+// Step 4: Run the MapReduce operation
+db.sites.mapReduce(
+  mapFunction,
+  reduceFunction,
+  {
+    out: "site_access_per_month"  // Output collection name
+  }
+);
+
+
+// Step 5: View the results
+db.site_access_per_month.find().forEach(printjson);
+
+
+
+
+12 Implement Indexing and querying with MongoDB using following example.
+
+                        Students(stud_id, stud_name,stud_addr,stud_marks)
+
+
+// Insert sample data with Indian names
+db.Students.insertMany([
+  { stud_id: 1, stud_name: "Amit Sharma", stud_addr: "Delhi", stud_marks: 82 },
+  { stud_id: 2, stud_name: "Sneha Patel", stud_addr: "Ahmedabad", stud_marks: 91 },
+  { stud_id: 3, stud_name: "Rajesh Kumar", stud_addr: "Mumbai", stud_marks: 77 },
+  { stud_id: 4, stud_name: "Priya Singh", stud_addr: "Bangalore", stud_marks: 89 },
+  { stud_id: 5, stud_name: "Anjali Rao", stud_addr: "Hyderabad", stud_marks: 85 }
+]);
+
+// Create indexes
+db.Students.createIndex({ stud_id: 1 });
+db.Students.createIndex({ stud_name: 1 });
+db.Students.createIndex({ stud_addr: 1, stud_marks: -1 });
+
+// Queries
+db.Students.find({ stud_id: 3 });
+db.Students.find({ stud_name: "Priya Singh" });
+db.Students.find({ stud_addr: "Delhi", stud_marks: { $gt: 80 } }).sort({ stud_marks: -1 });
+
+
+
+16 Implement Map reduce operation with following example using MongoDB
+Students(stud_id, stud_name,stud_addr,stud_marks) 
+
+AND
+Write a PL/SQL code to calculate total and percentage of marks of the students in four subjects.
+
+PART A:
+// Sample data insertion (if needed)
+db.Students.insertMany([
+  { stud_id: 1, stud_name: "Amit Sharma", stud_addr: "Delhi", stud_marks: 320 },
+  { stud_id: 2, stud_name: "Sneha Patel", stud_addr: "Ahmedabad", stud_marks: 350 },
+  { stud_id: 3, stud_name: "Rajesh Kumar", stud_addr: "Delhi", stud_marks: 300 },
+  { stud_id: 4, stud_name: "Priya Singh", stud_addr: "Bangalore", stud_marks: 310 },
+  { stud_id: 5, stud_name: "Anjali Rao", stud_addr: "Ahmedabad", stud_marks: 340 }
+]);
+
+// Map function: emit stud_addr as key and stud_marks as value
+var mapFunction = function() {
+  emit(this.stud_addr, this.stud_marks);
+};
+
+// Reduce function: sum all marks for each stud_addr
+var reduceFunction = function(key, values) {
+  return Array.sum(values);
+};
+
+// Run MapReduce
+db.Students.mapReduce(
+  mapFunction,
+  reduceFunction,
+  { out: "total_marks_by_city" }
+);
+
+// View results
+db.total_marks_by_city.find();
+
+
+
+PART B:
+
+-- Step 1: Create the students table with marks for 4 subjects
+CREATE TABLE students (
+  stud_id NUMBER PRIMARY KEY,
+  stud_name VARCHAR2(50),
+  marks_sub1 NUMBER(3),
+  marks_sub2 NUMBER(3),
+  marks_sub3 NUMBER(3),
+  marks_sub4 NUMBER(3)
+);
+
+-- Step 2: Insert sample student data
+INSERT INTO students VALUES (1, 'Amit Sharma', 85, 78, 92, 88);
+INSERT INTO students VALUES (2, 'Sneha Patel', 90, 85, 88, 91);
+INSERT INTO students VALUES (3, 'Rajesh Kumar', 75, 80, 70, 68);
+INSERT INTO students VALUES (4, 'Priya Singh', 88, 92, 95, 90);
+INSERT INTO students VALUES (5, 'Anjali Rao', 80, 82, 79, 85);
+
+COMMIT;
+
+-- Step 3: PL/SQL block to calculate total and percentage for each student
+DECLARE
+  v_total NUMBER(3);        -- Variable to store total marks
+  v_percentage NUMBER(5,2); -- Variable to store percentage with 2 decimal places
+BEGIN
+  -- Loop through each student record
+  FOR rec IN (
+    SELECT stud_id, stud_name, marks_sub1, marks_sub2, marks_sub3, marks_sub4 FROM students
+  )
+  LOOP
+    -- Calculate total marks by summing marks of 4 subjects
+    v_total := rec.marks_sub1 + rec.marks_sub2 + rec.marks_sub3 + rec.marks_sub4;
+    
+    -- Calculate percentage assuming each subject is out of 100 marks
+    v_percentage := (v_total / 400) * 100;
+    
+    -- Display student details, total marks and percentage
+    DBMS_OUTPUT.PUT_LINE('Student: ' || rec.stud_name);
+    DBMS_OUTPUT.PUT_LINE('Total Marks: ' || v_total);
+    DBMS_OUTPUT.PUT_LINE('Percentage: ' || ROUND(v_percentage, 2) || '%');
+    DBMS_OUTPUT.PUT_LINE('-----------------------------');
+  END LOOP;
+END;
+/
+
+17 Create  following collection and  using MongoDB  implement all CRUD operations.
+                        Orders( cust_id, amount, status)
+
+
+// Create and insert orders (Create)
+db.Orders.insertOne({ cust_id: 101, amount: 500, status: "pending" });
+
+db.Orders.insertMany([
+  { cust_id: 102, amount: 1200, status: "completed" },
+  { cust_id: 103, amount: 700, status: "pending" },
+  { cust_id: 104, amount: 1500, status: "shipped" }
+]);
+
+// Read operations (Retrieve)
+db.Orders.find();                           // Find all orders
+db.Orders.find({ status: "pending" });     // Find orders with status "pending"
+db.Orders.find({ amount: { $gt: 1000 } }); // Find orders with amount > 1000
+
+// Update operations
+db.Orders.updateOne(
+  { cust_id: 101 },
+  { $set: { status: "completed" } }
+);
+
+db.Orders.updateMany(
+  { status: "pending" },
+  { $inc: { amount: 100 } }  // Increase amount by 100
+);
+
+// Delete operations
+db.Orders.deleteOne({ cust_id: 104 });      // Delete order with cust_id 104
+db.Orders.deleteMany({ status: "completed" }); // Delete all completed orders
+
+
+
+23  Implement all Aggregation operations and types of indexing with following collection using MongoDB. 
+Employee(emp_id, emp_name,emp_dept,salary)
+
+
+// Step 1: Insert sample data
+db.Employee.insertMany([
+  { emp_id: 101, emp_name: "Amit Sharma", emp_dept: "HR", salary: 40000 },
+  { emp_id: 102, emp_name: "Sneha Patel", emp_dept: "IT", salary: 60000 },
+  { emp_id: 103, emp_name: "Rajesh Kumar", emp_dept: "Finance", salary: 50000 },
+  { emp_id: 104, emp_name: "Priya Singh", emp_dept: "IT", salary: 75000 },
+  { emp_id: 105, emp_name: "Anjali Rao", emp_dept: "HR", salary: 42000 },
+  { emp_id: 106, emp_name: "Manoj Verma", emp_dept: "Finance", salary: 52000 }
+]);
+
+// Step 2: Aggregation Operations
+
+// 1. $match – filter employees from IT department
+db.Employee.aggregate([
+  { $match: { emp_dept: "IT" } }
+]);
+
+// 2. $group – group by department and calculate average salary
+db.Employee.aggregate([
+  { $group: { _id: "$emp_dept", avg_salary: { $avg: "$salary" } } }
+]);
+
+// 3. $sort – sort employees by salary descending
+db.Employee.aggregate([
+  { $sort: { salary: -1 } }
+]);
+
+// 4. $project – include only emp_name and salary
+db.Employee.aggregate([
+  { $project: { emp_name: 1, salary: 1, _id: 0 } }
+]);
+
+// 5. $count – count total number of employees
+db.Employee.aggregate([
+  { $count: "total_employees" }
+]);
+
+// 6. $limit – show only top 3 highest paid employees
+db.Employee.aggregate([
+  { $sort: { salary: -1 } },
+  { $limit: 3 }
+]);
+
+// Step 3: Indexing
+
+// 1. Single Field Index – on emp_id
+db.Employee.createIndex({ emp_id: 1 });
+
+// 2. Compound Index – on emp_dept and salary
+db.Employee.createIndex({ emp_dept: 1, salary: -1 });
+
+// 3. Unique Index – to ensure emp_id is unique
+db.Employee.createIndex({ emp_id: 1 }, { unique: true });
+
+// 4. Text Index – on emp_name for search
+db.Employee.createIndex({ emp_name: "text" });
+
+// Optional: Check all created indexes
+db.Employee.getIndexes();
+
+
+
+
+
+25  Design and Implement any 5 query using MongoDB
+Create a collection called ‘games’.
+Add 5 games to the database. Give each document the following properties: name, gametype, score (out of 100), achievements
+Write a query that returns all the games
+Write a query that returns the 3 highest scored games.
+Write a query that returns all the games that have both the ‘Game Maser’ and
+the ‘Speed Demon’ achievements.
+
+// Step 1: Create and insert 5 games into the 'games' collection
+db.games.insertMany([
+  {
+    name: "Racing Thunder",
+    gametype: "Racing",
+    score: 88,
+    achievements: ["Speed Demon", "Track Master"]
+  },
+  {
+    name: "Battle Arena",
+    gametype: "Action",
+    score: 92,
+    achievements: ["Game Master", "Sharp Shooter"]
+  },
+  {
+    name: "Mystery Quest",
+    gametype: "Adventure",
+    score: 75,
+    achievements: ["Explorer", "Puzzle Solver"]
+  },
+  {
+    name: "Speed Legend",
+    gametype: "Racing",
+    score: 95,
+    achievements: ["Speed Demon", "Game Master"]
+  },
+  {
+    name: "Kingdom Clash",
+    gametype: "Strategy",
+    score: 89,
+    achievements: ["Game Master", "Tactician"]
+  }
+]);
+
+// Step 2: Query 1 – Return all games
+db.games.find();
+
+// Step 3: Query 2 – Return top 3 highest scored games
+db.games.find().sort({ score: -1 }).limit(3);
+
+// Step 4: Query 3 – Return games that have both 'Game Master' and 'Speed Demon' achievements
+db.games.find({
+  achievements: { $all: ["Game Master", "Speed Demon"] }
+});
+
+
+
+31.Create database  :Citydetails(_id,name,area,population(total,Adults,seniorcitizens,sexratio), geography(avgtemp, avgrainfall, longitude, latitude))
+
+
+1. Find the total population in pune.
+2.  returns all city with total population greater than 10 million
+3. returns the average populations for each city.
+4.  returns the minimum and maximum cities by population for each city.
+
+
+
+
+
+
+// Step 1: Insert sample city data
+db.Citydetails.insertMany([
+  {
+    _id: 1,
+    name: "Pune",
+    area: 731,
+    population: {
+      total: 7600000,
+      Adults: 5400000,
+      seniorcitizens: 800000,
+      sexratio: 948
+    },
+    geography: {
+      avgtemp: 24,
+      avgrainfall: 722,
+      longitude: 73.8567,
+      latitude: 18.5204
+    }
+  },
+  {
+    _id: 2,
+    name: "Mumbai",
+    area: 603,
+    population: {
+      total: 12400000,
+      Adults: 9000000,
+      seniorcitizens: 1200000,
+      sexratio: 852
+    },
+    geography: {
+      avgtemp: 27,
+      avgrainfall: 2422,
+      longitude: 72.8777,
+      latitude: 19.0760
+    }
+  },
+  {
+    _id: 3,
+    name: "Nagpur",
+    area: 227,
+    population: {
+      total: 2400000,
+      Adults: 1700000,
+      seniorcitizens: 250000,
+      sexratio: 961
+    },
+    geography: {
+      avgtemp: 26,
+      avgrainfall: 1200,
+      longitude: 79.0882,
+      latitude: 21.1458
+    }
+  },
+  {
+    _id: 4,
+    name: "Delhi",
+    area: 1484,
+    population: {
+      total: 19000000,
+      Adults: 14000000,
+      seniorcitizens: 2200000,
+      sexratio: 850
+    },
+    geography: {
+      avgtemp: 25,
+      avgrainfall: 800,
+      longitude: 77.1025,
+      latitude: 28.7041
+    }
+  }
+]);
+
+
+// Step 2: Query – Find total population in Pune
+db.Citydetails.find(
+  { name: "Pune" },
+  { _id: 0, name: 1, "population.total": 1 }
+);
+
+
+// Step 3: Query – Cities with total population greater than 10 million
+db.Citydetails.find(
+  { "population.total": { $gt: 10000000 } },
+  { _id: 0, name: 1, "population.total": 1 }
+);
+
+
+// Step 4: Query – Average population across all cities
+db.Citydetails.aggregate([
+  {
+    $group: {
+      _id: null,
+      avg_population: { $avg: "$population.total" }
+    }
+  }
+]);
+
+
+// Step 5: Query – Minimum and maximum population among all cities
+db.Citydetails.aggregate([
+  {
+    $group: {
+      _id: null,
+      min_population: { $min: "$population.total" },
+      max_population: { $max: "$population.total" }
+    }
+  }
+]);
+
+
+
+
+32.Create database  :Citydetails(_id,name,area,population(total,Adults,seniorcitizens,sexratio), geography (avgtemp, avgrainfall, longitude, latitude))
+
+
+
+
+Find area wise total population and sort them in increasing order.
+Retrieve name and area where average rain fall is greater than 60
+Create index on city and area find the max population in Mumbai
+Create index on name.
+
+
+// Step 1: Insert sample data into Citydetails collection
+db.Citydetails.insertMany([
+  {
+    _id: 1,
+    name: "Pune",
+    area: 731,
+    population: {
+      total: 7600000,
+      Adults: 5400000,
+      seniorcitizens: 800000,
+      sexratio: 948
+    },
+    geography: {
+      avgtemp: 24,
+      avgrainfall: 722,
+      longitude: 73.8567,
+      latitude: 18.5204
+    }
+  },
+  {
+    _id: 2,
+    name: "Mumbai",
+    area: 603,
+    population: {
+      total: 12400000,
+      Adults: 9000000,
+      seniorcitizens: 1200000,
+      sexratio: 852
+    },
+    geography: {
+      avgtemp: 27,
+      avgrainfall: 2422,
+      longitude: 72.8777,
+      latitude: 19.0760
+    }
+  },
+  {
+    _id: 3,
+    name: "Nagpur",
+    area: 227,
+    population: {
+      total: 2400000,
+      Adults: 1700000,
+      seniorcitizens: 250000,
+      sexratio: 961
+    },
+    geography: {
+      avgtemp: 26,
+      avgrainfall: 1200,
+      longitude: 79.0882,
+      latitude: 21.1458
+    }
+  },
+  {
+    _id: 4,
+    name: "Delhi",
+    area: 1484,
+    population: {
+      total: 19000000,
+      Adults: 14000000,
+      seniorcitizens: 2200000,
+      sexratio: 850
+    },
+    geography: {
+      avgtemp: 25,
+      avgrainfall: 800,
+      longitude: 77.1025,
+      latitude: 28.7041
+    }
+  }
+]);
+
+
+// Step 2: Query – Find area-wise total population and sort in increasing order
+db.Citydetails.aggregate([
+  {
+    $project: {
+      name: 1,
+      area: 1,
+      total_population: "$population.total"
+    }
+  },
+  {
+    $sort: { area: 1 }
+  }
+]);
+
+
+// Step 3: Query – Retrieve name and area where average rainfall > 60
+db.Citydetails.find(
+  { "geography.avgrainfall": { $gt: 60 } },
+  { _id: 0, name: 1, area: 1 }
+);
+
+
+// Step 4: Create index on city (name) and area, then find max population in Mumbai
+db.Citydetails.createIndex({ name: 1, area: 1 });
+
+
+// Find max population in Mumbai
+db.Citydetails.find(
+  { name: "Mumbai" },
+  { _id: 0, name: 1, "population.total": 1 }
+).sort({ "population.total": -1 }).limit(1);
+
+
+// Step 5: Create index on name only
+db.Citydetails.createIndex({ name: 1 });
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
