@@ -1,0 +1,163 @@
+ SQL Questions
+Types of Keys
+
+Primary Key – Uniquely identifies each record
+
+Candidate Key – Eligible to be a primary key
+
+Foreign Key – Links two tables
+
+Composite Key – Combination of two/more columns
+
+Alternate Key – Remaining candidate keys after selecting the primary key
+
+Strong / Weak Entity
+
+Strong Entity – Can exist without another entity
+
+Weak Entity – Depends on a strong entity (has no primary key of its own)
+
+SQL Statement Types
+
+DDL – Define structure (CREATE, ALTER, DROP)
+
+DML – Manage data (INSERT, UPDATE, DELETE)
+
+DCL – Control access (GRANT, REVOKE)
+
+SQL Objects
+
+Table – Stores data
+
+View – Virtual table from a query
+
+Sequence – Auto-generates numbers
+
+Index – Speeds up data retrieval
+
+Synonym – Alias for an object
+
+Trigger – Executes on data events
+
+Types of SQL Index
+
+Implicit Index – Auto-created (e.g., primary key)
+
+Explicit Index – Created manually using CREATE INDEX
+
+Group / Aggregate Functions
+
+COUNT() – Number of rows
+
+MIN() – Smallest value
+
+MAX() – Largest value
+
+AVG() – Average
+
+SUM() – Total sum
+
+Types of JOIN
+
+INNER JOIN – Matching rows
+
+LEFT JOIN – All from left + matched from right
+
+RIGHT JOIN – All from right + matched from left
+
+FULL JOIN – All rows from both
+
+CROSS JOIN – Cartesian product
+
+SQL vs PL/SQL
+
+SQL – Declarative, for querying
+
+PL/SQL – Procedural, supports loops, conditions, logic
+
+Procedure vs Function
+
+Procedure – May/may not return value
+
+Function – Must return a value
+
+Types of Cursors
+
+Implicit – Auto-created for simple queries
+
+Explicit – Manually defined for complex row-by-row handling
+
+Trivial Functional Dependency
+
+A → B, if B is a subset of A (e.g., A = {ID, Name}, B = {ID})
+
+Armstrong's Axioms
+
+Reflexivity: A ⊇ B → A → B
+
+Augmentation: A → B → AC → BC
+
+Transitivity: A → B, B → C → A → C
+
+🔹 MongoDB / NoSQL Questions
+Structured vs Unstructured Data
+
+Structured – Tables (SQL)
+
+Unstructured – Images, videos, docs, logs
+
+Semi-Structured Data
+
+Not in tables, but has tags or keys (e.g., JSON, XML)
+
+SQL = Vertical Scaling
+
+Add more power to one server
+NoSQL = Horizontal Scaling
+
+Add more servers (sharding)
+
+Replacing JOINs in NoSQL
+
+Use Embedded Documents inside collections
+
+Full Form of JSON
+
+JavaScript Object Notation
+
+Properties of MongoDB
+
+Schema-less
+
+Uses BSON
+
+High availability
+
+Auto-sharding
+
+Rich query language
+
+Use of $or and $in
+
+$or: Matches if any condition is true
+
+$in: Matches field values in a given array
+Difference: $or checks multiple fields; $in checks one field with multiple values.
+
+5 V’s of Big Data
+
+Volume, Velocity, Variety, Veracity, Value
+
+ACID Properties
+
+Atomicity – All or nothing
+
+Consistency – Valid state
+
+Isolation – Transactions don’t affect each other
+
+Durability – Data is saved permanently
+
+Codd's Rules (short summary)
+
+12 rules define what a relational DB should support (e.g., logical data independence, integrity rules, systematic treatment of nulls, etc.)
